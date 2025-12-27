@@ -1,0 +1,1273 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet.photon.css">
+        <link rel="stylesheet" href="css/leaflet-measure.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title></title>
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet.photon.js"></script>
+        <script src="js/leaflet-measure.js"></script>
+        <script src="data/Cuiab_setores_CD2022IDUL_web_5.js"></script>
+        <script src="data/Cuiab_setores_CD2022IEP_web_6.js"></script>
+        <script src="data/Cuiab_setores_CD2022IQUI_web_7.js"></script>
+        <script src="data/Cuiab_setores_CD2022IDR_web_8.js"></script>
+        <script src="data/Cuiab_setores_CD2022IDPU_web_9.js"></script>
+        <script src="data/Cuiab_setores_CD2022IPSA_web_10.js"></script>
+        <script src="data/Cuiab_setores_CD2022IVS_web_11.js"></script>
+        <script>
+        var highlightLayer;
+        function highlightFeature(e) {
+            highlightLayer = e.target;
+            highlightLayer.openPopup();
+        }
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        }).fitBounds([[-15.715641463259956,-56.18285351289573],[-15.534843262771027,-55.95192746242701]]);
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // modify popup if contains media
+        function addClassToPopupIfMedia(content, popup) {
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            var imgTd = tempDiv.querySelector('td img');
+            if (imgTd) {
+                var src = imgTd.getAttribute('src');
+                if (/\.(jpg|jpeg|png|gif|bmp|webp|avif)$/i.test(src)) {
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp3|wav|ogg|aac)$/i.test(src)) {
+                    var audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = src;
+                    imgTd.parentNode.replaceChild(audio, imgTd);
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp4|webm|ogg|mov)$/i.test(src)) {
+                    var video = document.createElement('video');
+                    video.controls = true;
+                    video.src = src;
+                    video.style.width = "400px";
+                    video.style.height = "300px";
+                    video.style.maxHeight = "60vh";
+                    video.style.maxWidth = "60vw";
+                    imgTd.parentNode.replaceChild(video, imgTd);
+                    popup._contentNode.classList.add('media');
+                    // Aggiorna il popup quando il video carica i metadati
+                    video.addEventListener('loadedmetadata', function() {
+                        popup.update();
+                    });
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else {
+                    popup._contentNode.classList.remove('media');
+                }
+            } else {
+                popup._contentNode.classList.remove('media');
+            }
+        }
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        var measureControl = new L.Control.Measure({
+            position: 'topleft',
+            primaryLengthUnit: 'meters',
+            secondaryLengthUnit: 'kilometers',
+            primaryAreaUnit: 'sqmeters',
+            secondaryAreaUnit: 'hectares'
+        });
+        measureControl.addTo(map);
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].innerHTML = '';
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].className += ' fas fa-ruler';
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+        }
+        map.createPane('pane_OSMStandard_0');
+        map.getPane('pane_OSMStandard_0').style.zIndex = 400;
+        var layer_OSMStandard_0 = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            pane: 'pane_OSMStandard_0',
+            opacity: 1.0,
+            attribution: '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors, CC-BY-SA</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 19
+        });
+        layer_OSMStandard_0;
+        map.createPane('pane_OpenTopoMap_1');
+        map.getPane('pane_OpenTopoMap_1').style.zIndex = 401;
+        var layer_OpenTopoMap_1 = L.tileLayer('https://a.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            pane: 'pane_OpenTopoMap_1',
+            opacity: 1.0,
+            attribution: '<a href="https://www.openstreetmap.org/copyright">Kartendaten: © OpenStreetMap-Mitwirkende, SRTM | Kartendarstellung: © OpenTopoMap (CC-BY-SA)</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 18
+        });
+        layer_OpenTopoMap_1;
+        map.createPane('pane_GoogleTerrain_2');
+        map.getPane('pane_GoogleTerrain_2').style.zIndex = 402;
+        var layer_GoogleTerrain_2 = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleTerrain_2',
+            opacity: 1.0,
+            attribution: '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_GoogleTerrain_2;
+        map.addLayer(layer_GoogleTerrain_2);
+        map.createPane('pane_GoogleRoad_3');
+        map.getPane('pane_GoogleRoad_3').style.zIndex = 403;
+        var layer_GoogleRoad_3 = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleRoad_3',
+            opacity: 1.0,
+            attribution: '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_GoogleRoad_3;
+        map.addLayer(layer_GoogleRoad_3);
+        map.createPane('pane_GoogleSatellite_4');
+        map.getPane('pane_GoogleSatellite_4').style.zIndex = 404;
+        var layer_GoogleSatellite_4 = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleSatellite_4',
+            opacity: 1.0,
+            attribution: '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_GoogleSatellite_4;
+        function pop_Cuiab_setores_CD2022IDUL_web_5(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">CD_SETOR</th>\
+                        <td>' + (feature.properties['CD_SETOR'] !== null ? autolinker.link(String(feature.properties['CD_SETOR']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Situação</th>\
+                        <td>' + (feature.properties['Situação'] !== null ? autolinker.link(String(feature.properties['Situação']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Município</th>\
+                        <td>' + (feature.properties['Município'] !== null ? autolinker.link(String(feature.properties['Município']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Bairro</th>\
+                        <td>' + (feature.properties['Bairro'] !== null ? autolinker.link(String(feature.properties['Bairro']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Pessoas</th>\
+                        <td>' + (feature.properties['Pessoas'] !== null ? autolinker.link(String(feature.properties['Pessoas']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Domicílio</th>\
+                        <td>' + (feature.properties['Domicílio'] !== null ? autolinker.link(String(feature.properties['Domicílio']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator1</th>\
+                        <td class="visible-with-data" id="Fator1">' + (feature.properties['Fator1'] !== null ? autolinker.link(String(feature.properties['Fator1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator2</th>\
+                        <td>' + (feature.properties['Fator2'] !== null ? autolinker.link(String(feature.properties['Fator2']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator3</th>\
+                        <td>' + (feature.properties['Fator3'] !== null ? autolinker.link(String(feature.properties['Fator3']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">IDUL</th>\
+                        <td>' + (feature.properties['IDUL'] !== null ? autolinker.link(String(feature.properties['IDUL']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Cuiab_setores_CD2022IDUL_web_5_0(feature) {
+            if (feature.properties['IDUL'] >= 0.000000 && feature.properties['IDUL'] <= 0.203000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDUL_web_5',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,25,28,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDUL'] >= 0.203000 && feature.properties['IDUL'] <= 0.486000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDUL_web_5',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(253,174,97,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDUL'] >= 0.486000 && feature.properties['IDUL'] <= 0.621000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDUL_web_5',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,255,191,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDUL'] >= 0.621000 && feature.properties['IDUL'] <= 0.735000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDUL_web_5',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(171,217,233,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDUL'] >= 0.735000 && feature.properties['IDUL'] <= 0.957000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDUL_web_5',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(44,123,182,0.5)',
+                interactive: true,
+            }
+            }
+        }
+        map.createPane('pane_Cuiab_setores_CD2022IDUL_web_5');
+        map.getPane('pane_Cuiab_setores_CD2022IDUL_web_5').style.zIndex = 405;
+        map.getPane('pane_Cuiab_setores_CD2022IDUL_web_5').style['mix-blend-mode'] = 'normal';
+        var layer_Cuiab_setores_CD2022IDUL_web_5 = new L.geoJson(json_Cuiab_setores_CD2022IDUL_web_5, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Cuiab_setores_CD2022IDUL_web_5',
+            layerName: 'layer_Cuiab_setores_CD2022IDUL_web_5',
+            pane: 'pane_Cuiab_setores_CD2022IDUL_web_5',
+            onEachFeature: pop_Cuiab_setores_CD2022IDUL_web_5,
+            style: style_Cuiab_setores_CD2022IDUL_web_5_0,
+        });
+        bounds_group.addLayer(layer_Cuiab_setores_CD2022IDUL_web_5);
+        function pop_Cuiab_setores_CD2022IEP_web_6(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">CD_SETOR</th>\
+                        <td>' + (feature.properties['CD_SETOR'] !== null ? autolinker.link(String(feature.properties['CD_SETOR']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Situação</th>\
+                        <td>' + (feature.properties['Situação'] !== null ? autolinker.link(String(feature.properties['Situação']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Município</th>\
+                        <td>' + (feature.properties['Município'] !== null ? autolinker.link(String(feature.properties['Município']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Bairro</th>\
+                        <td>' + (feature.properties['Bairro'] !== null ? autolinker.link(String(feature.properties['Bairro']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Pessoas</th>\
+                        <td>' + (feature.properties['Pessoas'] !== null ? autolinker.link(String(feature.properties['Pessoas']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Domicílio</th>\
+                        <td>' + (feature.properties['Domicílio'] !== null ? autolinker.link(String(feature.properties['Domicílio']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">IEP</th>\
+                        <td>' + (feature.properties['IEP'] !== null ? autolinker.link(String(feature.properties['IEP']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator1</th>\
+                        <td>' + (feature.properties['Fator1'] !== null ? autolinker.link(String(feature.properties['Fator1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator2</th>\
+                        <td>' + (feature.properties['Fator2'] !== null ? autolinker.link(String(feature.properties['Fator2']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Cuiab_setores_CD2022IEP_web_6_0(feature) {
+            if (feature.properties['IEP'] >= 0.000000 && feature.properties['IEP'] <= 0.159000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IEP_web_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,25,28,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IEP'] >= 0.159000 && feature.properties['IEP'] <= 0.362000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IEP_web_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(253,174,97,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IEP'] >= 0.362000 && feature.properties['IEP'] <= 0.446000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IEP_web_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,255,191,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IEP'] >= 0.446000 && feature.properties['IEP'] <= 0.522000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IEP_web_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(171,217,233,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IEP'] >= 0.522000 && feature.properties['IEP'] <= 0.676000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IEP_web_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(44,123,182,0.5)',
+                interactive: true,
+            }
+            }
+        }
+        map.createPane('pane_Cuiab_setores_CD2022IEP_web_6');
+        map.getPane('pane_Cuiab_setores_CD2022IEP_web_6').style.zIndex = 406;
+        map.getPane('pane_Cuiab_setores_CD2022IEP_web_6').style['mix-blend-mode'] = 'normal';
+        var layer_Cuiab_setores_CD2022IEP_web_6 = new L.geoJson(json_Cuiab_setores_CD2022IEP_web_6, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Cuiab_setores_CD2022IEP_web_6',
+            layerName: 'layer_Cuiab_setores_CD2022IEP_web_6',
+            pane: 'pane_Cuiab_setores_CD2022IEP_web_6',
+            onEachFeature: pop_Cuiab_setores_CD2022IEP_web_6,
+            style: style_Cuiab_setores_CD2022IEP_web_6_0,
+        });
+        bounds_group.addLayer(layer_Cuiab_setores_CD2022IEP_web_6);
+        function pop_Cuiab_setores_CD2022IQUI_web_7(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">CD_SETOR</th>\
+                        <td>' + (feature.properties['CD_SETOR'] !== null ? autolinker.link(String(feature.properties['CD_SETOR']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Situação</th>\
+                        <td>' + (feature.properties['Situação'] !== null ? autolinker.link(String(feature.properties['Situação']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Município</th>\
+                        <td>' + (feature.properties['Município'] !== null ? autolinker.link(String(feature.properties['Município']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Bairro</th>\
+                        <td>' + (feature.properties['Bairro'] !== null ? autolinker.link(String(feature.properties['Bairro']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Pessoas</th>\
+                        <td>' + (feature.properties['Pessoas'] !== null ? autolinker.link(String(feature.properties['Pessoas']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Domicílio</th>\
+                        <td>' + (feature.properties['Domicílio'] !== null ? autolinker.link(String(feature.properties['Domicílio']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">IQUI</th>\
+                        <td>' + (feature.properties['IQUI'] !== null ? autolinker.link(String(feature.properties['IQUI']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator1</th>\
+                        <td>' + (feature.properties['Fator1'] !== null ? autolinker.link(String(feature.properties['Fator1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator2</th>\
+                        <td>' + (feature.properties['Fator2'] !== null ? autolinker.link(String(feature.properties['Fator2']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator3</th>\
+                        <td>' + (feature.properties['Fator3'] !== null ? autolinker.link(String(feature.properties['Fator3']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Cuiab_setores_CD2022IQUI_web_7_0(feature) {
+            if (feature.properties['IQUI'] >= 0.000000 && feature.properties['IQUI'] <= 0.000000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IQUI_web_7',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,25,28,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IQUI'] >= 0.000000 && feature.properties['IQUI'] <= 0.540000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IQUI_web_7',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(253,174,97,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IQUI'] >= 0.540000 && feature.properties['IQUI'] <= 0.631000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IQUI_web_7',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,255,191,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IQUI'] >= 0.631000 && feature.properties['IQUI'] <= 0.709000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IQUI_web_7',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(171,217,233,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IQUI'] >= 0.709000 && feature.properties['IQUI'] <= 0.970000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IQUI_web_7',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(44,123,182,0.5)',
+                interactive: true,
+            }
+            }
+        }
+        map.createPane('pane_Cuiab_setores_CD2022IQUI_web_7');
+        map.getPane('pane_Cuiab_setores_CD2022IQUI_web_7').style.zIndex = 407;
+        map.getPane('pane_Cuiab_setores_CD2022IQUI_web_7').style['mix-blend-mode'] = 'normal';
+        var layer_Cuiab_setores_CD2022IQUI_web_7 = new L.geoJson(json_Cuiab_setores_CD2022IQUI_web_7, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Cuiab_setores_CD2022IQUI_web_7',
+            layerName: 'layer_Cuiab_setores_CD2022IQUI_web_7',
+            pane: 'pane_Cuiab_setores_CD2022IQUI_web_7',
+            onEachFeature: pop_Cuiab_setores_CD2022IQUI_web_7,
+            style: style_Cuiab_setores_CD2022IQUI_web_7_0,
+        });
+        bounds_group.addLayer(layer_Cuiab_setores_CD2022IQUI_web_7);
+        function pop_Cuiab_setores_CD2022IDR_web_8(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">CD_SETOR</th>\
+                        <td>' + (feature.properties['CD_SETOR'] !== null ? autolinker.link(String(feature.properties['CD_SETOR']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Situação</th>\
+                        <td>' + (feature.properties['Situação'] !== null ? autolinker.link(String(feature.properties['Situação']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Município</th>\
+                        <td>' + (feature.properties['Município'] !== null ? autolinker.link(String(feature.properties['Município']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Bairro</th>\
+                        <td>' + (feature.properties['Bairro'] !== null ? autolinker.link(String(feature.properties['Bairro']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Pessoas</th>\
+                        <td>' + (feature.properties['Pessoas'] !== null ? autolinker.link(String(feature.properties['Pessoas']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Domicílio</th>\
+                        <td>' + (feature.properties['Domicílio'] !== null ? autolinker.link(String(feature.properties['Domicílio']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">IDR</th>\
+                        <td>' + (feature.properties['IDR'] !== null ? autolinker.link(String(feature.properties['IDR']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator1</th>\
+                        <td>' + (feature.properties['Fator1'] !== null ? autolinker.link(String(feature.properties['Fator1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator2</th>\
+                        <td>' + (feature.properties['Fator2'] !== null ? autolinker.link(String(feature.properties['Fator2']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Cuiab_setores_CD2022IDR_web_8_0(feature) {
+            if (feature.properties['IDR'] >= 0.000000 && feature.properties['IDR'] <= 0.149000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDR_web_8',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(44,123,182,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDR'] >= 0.149000 && feature.properties['IDR'] <= 0.332000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDR_web_8',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(171,217,233,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDR'] >= 0.332000 && feature.properties['IDR'] <= 0.487000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDR_web_8',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,255,191,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDR'] >= 0.487000 && feature.properties['IDR'] <= 0.634000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDR_web_8',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(253,174,97,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDR'] >= 0.634000 && feature.properties['IDR'] <= 1.000000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDR_web_8',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,25,28,0.5)',
+                interactive: true,
+            }
+            }
+        }
+        map.createPane('pane_Cuiab_setores_CD2022IDR_web_8');
+        map.getPane('pane_Cuiab_setores_CD2022IDR_web_8').style.zIndex = 408;
+        map.getPane('pane_Cuiab_setores_CD2022IDR_web_8').style['mix-blend-mode'] = 'normal';
+        var layer_Cuiab_setores_CD2022IDR_web_8 = new L.geoJson(json_Cuiab_setores_CD2022IDR_web_8, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Cuiab_setores_CD2022IDR_web_8',
+            layerName: 'layer_Cuiab_setores_CD2022IDR_web_8',
+            pane: 'pane_Cuiab_setores_CD2022IDR_web_8',
+            onEachFeature: pop_Cuiab_setores_CD2022IDR_web_8,
+            style: style_Cuiab_setores_CD2022IDR_web_8_0,
+        });
+        bounds_group.addLayer(layer_Cuiab_setores_CD2022IDR_web_8);
+        function pop_Cuiab_setores_CD2022IDPU_web_9(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">CD_SETOR</th>\
+                        <td>' + (feature.properties['CD_SETOR'] !== null ? autolinker.link(String(feature.properties['CD_SETOR']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Situação</th>\
+                        <td>' + (feature.properties['Situação'] !== null ? autolinker.link(String(feature.properties['Situação']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Município</th>\
+                        <td>' + (feature.properties['Município'] !== null ? autolinker.link(String(feature.properties['Município']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Bairro</th>\
+                        <td>' + (feature.properties['Bairro'] !== null ? autolinker.link(String(feature.properties['Bairro']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Pessoas</th>\
+                        <td>' + (feature.properties['Pessoas'] !== null ? autolinker.link(String(feature.properties['Pessoas']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Domicílio</th>\
+                        <td>' + (feature.properties['Domicílio'] !== null ? autolinker.link(String(feature.properties['Domicílio']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator1</th>\
+                        <td>' + (feature.properties['Fator1'] !== null ? autolinker.link(String(feature.properties['Fator1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator2</th>\
+                        <td>' + (feature.properties['Fator2'] !== null ? autolinker.link(String(feature.properties['Fator2']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">IDPU</th>\
+                        <td>' + (feature.properties['IDPU'] !== null ? autolinker.link(String(feature.properties['IDPU']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Cuiab_setores_CD2022IDPU_web_9_0(feature) {
+            if (feature.properties['IDPU'] >= 0.000000 && feature.properties['IDPU'] <= 0.329000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDPU_web_9',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(44,123,182,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDPU'] >= 0.329000 && feature.properties['IDPU'] <= 0.462000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDPU_web_9',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(171,217,233,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDPU'] >= 0.462000 && feature.properties['IDPU'] <= 0.564000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDPU_web_9',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,255,191,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDPU'] >= 0.564000 && feature.properties['IDPU'] <= 0.691000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDPU_web_9',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(253,174,97,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IDPU'] >= 0.691000 && feature.properties['IDPU'] <= 0.972000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IDPU_web_9',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,25,28,0.5)',
+                interactive: true,
+            }
+            }
+        }
+        map.createPane('pane_Cuiab_setores_CD2022IDPU_web_9');
+        map.getPane('pane_Cuiab_setores_CD2022IDPU_web_9').style.zIndex = 409;
+        map.getPane('pane_Cuiab_setores_CD2022IDPU_web_9').style['mix-blend-mode'] = 'normal';
+        var layer_Cuiab_setores_CD2022IDPU_web_9 = new L.geoJson(json_Cuiab_setores_CD2022IDPU_web_9, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Cuiab_setores_CD2022IDPU_web_9',
+            layerName: 'layer_Cuiab_setores_CD2022IDPU_web_9',
+            pane: 'pane_Cuiab_setores_CD2022IDPU_web_9',
+            onEachFeature: pop_Cuiab_setores_CD2022IDPU_web_9,
+            style: style_Cuiab_setores_CD2022IDPU_web_9_0,
+        });
+        bounds_group.addLayer(layer_Cuiab_setores_CD2022IDPU_web_9);
+        function pop_Cuiab_setores_CD2022IPSA_web_10(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">CD_SETOR</th>\
+                        <td>' + (feature.properties['CD_SETOR'] !== null ? autolinker.link(String(feature.properties['CD_SETOR']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Situação</th>\
+                        <td>' + (feature.properties['Situação'] !== null ? autolinker.link(String(feature.properties['Situação']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Município</th>\
+                        <td>' + (feature.properties['Município'] !== null ? autolinker.link(String(feature.properties['Município']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Bairro</th>\
+                        <td>' + (feature.properties['Bairro'] !== null ? autolinker.link(String(feature.properties['Bairro']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Pessoas</th>\
+                        <td>' + (feature.properties['Pessoas'] !== null ? autolinker.link(String(feature.properties['Pessoas']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Domicílio</th>\
+                        <td>' + (feature.properties['Domicílio'] !== null ? autolinker.link(String(feature.properties['Domicílio']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">IPSA</th>\
+                        <td>' + (feature.properties['IPSA'] !== null ? autolinker.link(String(feature.properties['IPSA']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator1</th>\
+                        <td>' + (feature.properties['Fator1'] !== null ? autolinker.link(String(feature.properties['Fator1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator2</th>\
+                        <td>' + (feature.properties['Fator2'] !== null ? autolinker.link(String(feature.properties['Fator2']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Cuiab_setores_CD2022IPSA_web_10_0(feature) {
+            if (feature.properties['IPSA'] >= 0.000000 && feature.properties['IPSA'] <= 0.096000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IPSA_web_10',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(44,123,182,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IPSA'] >= 0.096000 && feature.properties['IPSA'] <= 0.220000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IPSA_web_10',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(171,217,233,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IPSA'] >= 0.220000 && feature.properties['IPSA'] <= 0.336000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IPSA_web_10',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,255,191,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IPSA'] >= 0.336000 && feature.properties['IPSA'] <= 0.487000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IPSA_web_10',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(253,174,97,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IPSA'] >= 0.487000 && feature.properties['IPSA'] <= 0.997000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IPSA_web_10',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,25,28,0.5)',
+                interactive: true,
+            }
+            }
+        }
+        map.createPane('pane_Cuiab_setores_CD2022IPSA_web_10');
+        map.getPane('pane_Cuiab_setores_CD2022IPSA_web_10').style.zIndex = 410;
+        map.getPane('pane_Cuiab_setores_CD2022IPSA_web_10').style['mix-blend-mode'] = 'normal';
+        var layer_Cuiab_setores_CD2022IPSA_web_10 = new L.geoJson(json_Cuiab_setores_CD2022IPSA_web_10, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Cuiab_setores_CD2022IPSA_web_10',
+            layerName: 'layer_Cuiab_setores_CD2022IPSA_web_10',
+            pane: 'pane_Cuiab_setores_CD2022IPSA_web_10',
+            onEachFeature: pop_Cuiab_setores_CD2022IPSA_web_10,
+            style: style_Cuiab_setores_CD2022IPSA_web_10_0,
+        });
+        bounds_group.addLayer(layer_Cuiab_setores_CD2022IPSA_web_10);
+        function pop_Cuiab_setores_CD2022IVS_web_11(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">CD_SETOR</th>\
+                        <td>' + (feature.properties['CD_SETOR'] !== null ? autolinker.link(String(feature.properties['CD_SETOR']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Situação</th>\
+                        <td>' + (feature.properties['Situação'] !== null ? autolinker.link(String(feature.properties['Situação']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Município</th>\
+                        <td>' + (feature.properties['Município'] !== null ? autolinker.link(String(feature.properties['Município']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Bairro</th>\
+                        <td>' + (feature.properties['Bairro'] !== null ? autolinker.link(String(feature.properties['Bairro']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Pessoas</th>\
+                        <td>' + (feature.properties['Pessoas'] !== null ? autolinker.link(String(feature.properties['Pessoas']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Domicílio</th>\
+                        <td>' + (feature.properties['Domicílio'] !== null ? autolinker.link(String(feature.properties['Domicílio']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator1</th>\
+                        <td>' + (feature.properties['Fator1'] !== null ? autolinker.link(String(feature.properties['Fator1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator2</th>\
+                        <td>' + (feature.properties['Fator2'] !== null ? autolinker.link(String(feature.properties['Fator2']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Fator3</th>\
+                        <td>' + (feature.properties['Fator3'] !== null ? autolinker.link(String(feature.properties['Fator3']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">IVS</th>\
+                        <td>' + (feature.properties['IVS'] !== null ? autolinker.link(String(feature.properties['IVS']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Cuiab_setores_CD2022IVS_web_11_0(feature) {
+            if (feature.properties['IVS'] >= 0.000000 && feature.properties['IVS'] <= 0.123500 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IVS_web_11',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(44,123,182,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IVS'] >= 0.123500 && feature.properties['IVS'] <= 0.305200 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IVS_web_11',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(171,217,233,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IVS'] >= 0.305200 && feature.properties['IVS'] <= 0.401000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IVS_web_11',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,255,191,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IVS'] >= 0.401000 && feature.properties['IVS'] <= 0.502200 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IVS_web_11',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(253,174,97,0.5)',
+                interactive: true,
+            }
+            }
+            if (feature.properties['IVS'] >= 0.502200 && feature.properties['IVS'] <= 0.778000 ) {
+                return {
+                pane: 'pane_Cuiab_setores_CD2022IVS_web_11',
+                opacity: 1,
+                color: 'rgba(35,35,35,0.5)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(215,25,28,0.5)',
+                interactive: true,
+            }
+            }
+        }
+        map.createPane('pane_Cuiab_setores_CD2022IVS_web_11');
+        map.getPane('pane_Cuiab_setores_CD2022IVS_web_11').style.zIndex = 411;
+        map.getPane('pane_Cuiab_setores_CD2022IVS_web_11').style['mix-blend-mode'] = 'normal';
+        var layer_Cuiab_setores_CD2022IVS_web_11 = new L.geoJson(json_Cuiab_setores_CD2022IVS_web_11, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Cuiab_setores_CD2022IVS_web_11',
+            layerName: 'layer_Cuiab_setores_CD2022IVS_web_11',
+            pane: 'pane_Cuiab_setores_CD2022IVS_web_11',
+            onEachFeature: pop_Cuiab_setores_CD2022IVS_web_11,
+            style: style_Cuiab_setores_CD2022IVS_web_11_0,
+        });
+        bounds_group.addLayer(layer_Cuiab_setores_CD2022IVS_web_11);
+        map.addLayer(layer_Cuiab_setores_CD2022IVS_web_11);
+        var overlaysTree = [
+            {label: 'Cuiabá_setores_CD2022-IVS_web<br /><table><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IVS_web_11_001230.png" /></td><td>0 - 0,123</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IVS_web_11_012303051.png" /></td><td>0,123 - 0,305</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IVS_web_11_030504012.png" /></td><td>0,305 - 0,401</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IVS_web_11_040105023.png" /></td><td>0,401 - 0,502</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IVS_web_11_050207784.png" /></td><td>0,502 - 0,778</td></tr></table>', layer: layer_Cuiab_setores_CD2022IVS_web_11},
+            {label: 'Cuiabá_setores_CD2022-IPSA_web<br /><table><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IPSA_web_10_000960.png" /></td><td>0 - 0,096</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IPSA_web_10_00960221.png" /></td><td>0,096 - 0,22</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IPSA_web_10_02203362.png" /></td><td>0,22 - 0,336</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IPSA_web_10_033604873.png" /></td><td>0,336 - 0,487</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IPSA_web_10_048709974.png" /></td><td>0,487 - 0,997</td></tr></table>', layer: layer_Cuiab_setores_CD2022IPSA_web_10},
+            {label: 'Cuiabá_setores_CD2022-IDPU_web<br /><table><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDPU_web_9_00330.png" /></td><td>0 - 0,33</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDPU_web_9_0330461.png" /></td><td>0,33 - 0,46</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDPU_web_9_0460562.png" /></td><td>0,46 - 0,56</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDPU_web_9_0560693.png" /></td><td>0,56 - 0,69</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDPU_web_9_0690974.png" /></td><td>0,69 - 0,97</td></tr></table>', layer: layer_Cuiab_setores_CD2022IDPU_web_9},
+            {label: 'Cuiabá_setores_CD2022-IDR_web<br /><table><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDR_web_8_00150.png" /></td><td>0 - 0,15</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDR_web_8_0150331.png" /></td><td>0,15 - 0,33</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDR_web_8_0330492.png" /></td><td>0,33 - 0,49</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDR_web_8_0490633.png" /></td><td>0,49 - 0,63</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDR_web_8_06314.png" /></td><td>0,63 - 1</td></tr></table>', layer: layer_Cuiab_setores_CD2022IDR_web_8},
+            {label: 'Cuiabá_setores_CD2022-IQUI_web<br /><table><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IQUI_web_7_000.png" /></td><td>0 - 0</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IQUI_web_7_00541.png" /></td><td>0 - 0,54</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IQUI_web_7_05406312.png" /></td><td>0,54 - 0,631</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IQUI_web_7_063107093.png" /></td><td>0,631 - 0,709</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IQUI_web_7_07090974.png" /></td><td>0,709 - 0,97</td></tr></table>', layer: layer_Cuiab_setores_CD2022IQUI_web_7},
+            {label: 'Cuiabá_setores_CD2022-IEP_web<br /><table><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IEP_web_6_001590.png" /></td><td>0 - 0,159</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IEP_web_6_015903621.png" /></td><td>0,159 - 0,362</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IEP_web_6_036204462.png" /></td><td>0,362 - 0,446</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IEP_web_6_044605223.png" /></td><td>0,446 - 0,522</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IEP_web_6_052206764.png" /></td><td>0,522 - 0,676</td></tr></table>', layer: layer_Cuiab_setores_CD2022IEP_web_6},
+            {label: 'Cuiabá_setores_CD2022-IDUL_web<br /><table><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDUL_web_5_0020.png" /></td><td>0 - 0,2</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDUL_web_5_020491.png" /></td><td>0,2 - 0,49</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDUL_web_5_0490622.png" /></td><td>0,49 - 0,62</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDUL_web_5_0620733.png" /></td><td>0,62 - 0,73</td></tr><tr><td style="text-align: center;"><img src="legend/Cuiab_setores_CD2022IDUL_web_5_0730964.png" /></td><td>0,73 - 0,96</td></tr></table>', layer: layer_Cuiab_setores_CD2022IDUL_web_5},
+            {label: "Google Satellite", layer: layer_GoogleSatellite_4, radioGroup: 'bm' },
+            {label: "Google Road", layer: layer_GoogleRoad_3, radioGroup: 'bm' },
+            {label: "Google Terrain", layer: layer_GoogleTerrain_2, radioGroup: 'bm' },
+            {label: "OpenTopoMap", layer: layer_OpenTopoMap_1, radioGroup: 'bm' },
+            {label: "OSM Standard", layer: layer_OSMStandard_0, radioGroup: 'bm' },]
+        var lay = L.control.layers.tree(null, overlaysTree,{
+            //namedToggle: true,
+            //selectorBack: false,
+            //closedSymbol: '&#8862; &#x1f5c0;',
+            //openedSymbol: '&#8863; &#x1f5c1;',
+            //collapseAll: 'Collapse all',
+            //expandAll: 'Expand all',
+            collapsed: true,
+        });
+        lay.addTo(map);
+        setBounds();
+        </script>        
+    </body>
+</html>
